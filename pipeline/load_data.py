@@ -36,12 +36,14 @@ def load_businesses(cur, path: str) -> dict[str, int]:
             row = json.loads(line)
             cur.execute(
                 """
-                INSERT INTO businesses (yelp_business_id, name, address, city, state, postal_code, categories)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO businesses (yelp_business_id, name, address, city, state, postal_code, categories, yelp_stars, yelp_review_count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (yelp_business_id) DO UPDATE SET
                     name = EXCLUDED.name,
                     address = EXCLUDED.address,
-                    postal_code = EXCLUDED.postal_code
+                    postal_code = EXCLUDED.postal_code,
+                    yelp_stars = EXCLUDED.yelp_stars,
+                    yelp_review_count = EXCLUDED.yelp_review_count
                 RETURNING id
                 """,
                 (
@@ -52,6 +54,8 @@ def load_businesses(cur, path: str) -> dict[str, int]:
                     row.get("state"),
                     row.get("postal_code"),
                     [c.strip() for c in row.get("categories", "").split(",") if c.strip()],
+                    row.get("stars"),
+                    row.get("review_count"),
                 ),
             )
             internal_id = cur.fetchone()[0]

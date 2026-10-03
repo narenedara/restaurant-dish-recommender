@@ -50,18 +50,26 @@ psql "<direct connection string>" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 **Supabase free tier limits worth knowing**: 500MB database storage, and the
 project pauses after a week of no API/database activity (anyone visiting the
-app wakes it back up automatically within a few seconds). If you've loaded
-the nationwide dataset, check your actual usage in Supabase's dashboard —
-businesses + reviews alone may approach or exceed 500MB depending on how
-much you've loaded; if so, either upgrade ($25/mo for the next tier) or trim
-back to a smaller slice of cities before migrating.
+app wakes it back up automatically within a few seconds). The dataset as
+currently trimmed (Philadelphia only, sub-3-star untouched restaurants
+dropped, reviews capped at 40/business except already-extracted ones) is
+**~190MB** — comfortable margin. If you expand the dataset later (more
+cities, a higher review cap), re-check `SELECT
+pg_size_pretty(pg_database_size('dishfinder'));` before migrating —
+`pipeline/trim_dataset.py` has the tools to shrink it back down (uses a
+create-filtered-copy-and-swap approach, not DELETE — much faster at this
+scale, see that file's docstring).
 
 ## 2. Railway — the app
 
-Railway can deploy straight from your local directory with its CLI — no
-GitHub repo required (handy since this project isn't in git yet). From the
-project root:
+Code's already on GitHub: https://github.com/narenedara/restaurant-dish-recommender
 
+**Option A — GitHub integration (recommended, auto-redeploys on push):**
+1. [railway.app](https://railway.app) → New Project → **Deploy from GitHub repo**
+2. Pick `restaurant-dish-recommender`, authorize Railway's GitHub App if asked
+3. Railway reads the `Procfile` automatically — no build config needed
+
+**Option B — CLI, deploy from your local directory directly:**
 ```bash
 railway login          # opens a browser to authenticate
 railway init            # creates a new Railway project, asks for a name

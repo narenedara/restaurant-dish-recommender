@@ -16,6 +16,8 @@
 --       -c "ALTER TABLE reviews ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMPTZ;
 --           ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT;
 --           ALTER TABLE businesses ADD COLUMN IF NOT EXISTS postal_code TEXT;
+--           ALTER TABLE businesses ADD COLUMN IF NOT EXISTS yelp_stars NUMERIC(2,1);
+--           ALTER TABLE businesses ADD COLUMN IF NOT EXISTS yelp_review_count INTEGER;
 --           ALTER TABLE dishes ADD COLUMN IF NOT EXISTS blurb TEXT;"
 -- Then re-run pipeline.load_data on your city's filtered files to backfill
 -- address/postal_code on already-loaded businesses.
@@ -30,7 +32,12 @@ CREATE TABLE IF NOT EXISTS businesses (
     city                TEXT,
     state               TEXT,
     postal_code         TEXT,
-    categories          TEXT[]
+    categories          TEXT[],
+    -- Yelp's own crowd-sourced average rating and review count — not
+    -- computed by this project, just carried over so low-rated
+    -- businesses can be filtered out before ever extracting/hosting them.
+    yelp_stars          NUMERIC(2, 1),
+    yelp_review_count    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS reviews (
