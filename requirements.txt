@@ -1,0 +1,15 @@
+# Phase 1 + phase 2. langgraph and fastapi still get added in later phases
+# once this core loop is working — no need to install what you're not
+# using yet.
+anthropic>=0.69
+psycopg[binary]>=3.1
+pgvector>=0.3
+python-dotenv>=1.0
+pydantic>=2.0
+tenacity>=8.0
+voyageai>=0.3  # dish-name embeddings for pipeline.aggregate's fuzzy matching
+numpy>=1.26  # vectorized cosine-similarity clustering in pipeline.aggregate (already a transitive voyageai dep, listed explicitly since we import it directly)
+
+# Phase 3
+fastapi>=0.115
+uvicorn[standard]>=0.32

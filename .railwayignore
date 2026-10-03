@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.pgdata/
+dishfinder_dump.sql
+data/*
+!data/sample/
+!data/sample/**

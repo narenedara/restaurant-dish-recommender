@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dish Recommender</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-top: #fdf6ee;
+    --bg-bottom: #f6ecdf;
+    --card: #ffffff;
+    --border: #ecdfd0;
+    --text: #2a2420;
+    --muted: #8a7d6d;
+    --accent: #c1502e;
+    --accent-dark: #9c3d20;
+    --accent-soft: #f3e2d6;
+    --positive: #3f7d55;
+    --negative: #b0473a;
+    --shadow: 0 1px 2px rgba(60, 40, 20, 0.04), 0 8px 24px rgba(60, 40, 20, 0.06);
+    --shadow-lift: 0 4px 10px rgba(60, 40, 20, 0.06), 0 16px 40px rgba(60, 40, 20, 0.1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    min-height: 100vh;
+  }
+  .page {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 64px 20px 100px;
+  }
+
+  header { margin-bottom: 40px; }
+  .kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    max-width: 460px;
+  }
+
+  /* --- Search + predictive dropdown --- */
+  .search-wrap {
+    position: relative;
+    margin-top: 32px;
+  }
+  .search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .search-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lift);
+  }
+  .search-icon {
+    position: absolute;
+    left: 16px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 16px 16px 16px 46px;
+    font-size: 16px;
+    font-family: inherit;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text);
+  }
+  input[type="text"]:focus { outline: none; }
+  input[type="text"]::placeholder { color: #b8ab99; }
+  .clear-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-right: 10px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    cursor: pointer;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .clear-btn.visible { display: flex; }
+  .clear-btn:hover { background: #ead2bc; }
+
+  .suggestions {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-lift);
+    overflow: hidden;
+    z-index: 20;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    pointer-events: none;
+  }
+  .suggestions.open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .suggestion-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    text-align: left;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .suggestion-item + .suggestion-item { border-top: 1px solid var(--border); }
+  .suggestion-item:hover, .suggestion-item.highlighted { background: var(--accent-soft); }
+  .suggestion-name { font-weight: 600; font-size: 15px; }
+  .suggestion-name mark { background: none; color: var(--accent-dark); font-weight: 700; }
+  .suggestion-address { font-size: 13px; color: var(--muted); }
+  .suggestion-more {
+    padding: 10px 16px;
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--bg-top);
+  }
+  .suggestion-empty {
+    padding: 16px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  /* --- Status / loading --- */
+  .status {
+    margin-top: 20px;
+    color: var(--muted);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* .status's own `display: flex` above has the same specificity as the
+     browser's default `[hidden] { display: none }` rule, and author CSS
+     wins that tie — so without this, setting `.hidden = true` in JS
+     silently fails to actually hide the element. Caught via screenshot,
+     not by reading the code. */
+  .status[hidden] { display: none; }
+  .status.error { color: var(--negative); }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* --- Results --- */
+  .results-header {
+    margin-top: 40px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-header h2 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: 26px;
+    margin: 0 0 4px;
+  }
+  .results-header .biz-address { color: var(--muted); font-size: 14px; }
+
+  .category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .chip .chip-count {
+    font-size: 11.5px;
+    opacity: 0.75;
+  }
+
+  .dish-card {
+    margin-top: 16px;
+    padding: 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    animation: rise 0.35s ease forwards;
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .dish-top { display: flex; align-items: flex-start; gap: 12px; }
+  .rank-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(155deg, var(--accent) 0%, var(--accent-dark) 100%);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(156, 61, 32, 0.35);
+  }
+  .dish-name-block { flex: 1; }
+  .dish-name {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.25;
+  }
+  .sentiment-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .sentiment-bar {
+    width: 60px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .sentiment-fill { height: 100%; background: var(--positive); border-radius: 3px; }
+  .sentiment-fill.mixed { background: linear-gradient(90deg, var(--positive), var(--negative)); }
+  .sentiment-fill.negative { background: var(--negative); }
+
+  .blurb {
+    margin: 14px 0 0;
+    line-height: 1.55;
+    font-size: 15px;
+    color: #3a332c;
+  }
+  .tags {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent-dark);
+    background: var(--accent-soft);
+    border-radius: 100px;
+    padding: 4px 11px;
+  }
+
+  .empty-note {
+    margin-top: 16px;
+    padding: 18px;
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="kicker">🍽 Dish Recommender</div>
+      <h1>What should I order?</h1>
+      <p class="subtitle">Search a restaurant and see its top dishes, ranked by real reviewer sentiment — not just star ratings.</p>
+    </header>
+
+    <div class="search-wrap">
+      <div class="search-box">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search a restaurant..." autocomplete="off" spellcheck="false">
+        <button class="clear-btn" id="clear-btn" aria-label="Clear search">✕</button>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+
+    <div id="status" class="status" hidden></div>
+    <div id="results-header" class="results-header" hidden>
+      <h2 id="results-name"></h2>
+      <div id="results-address" class="biz-address"></div>
+    </div>
+    <div id="category-chips" class="category-chips" hidden></div>
+    <div id="results"></div>
+  </div>
+
+<script>
+  const searchInput = document.getElementById("search-input");
+  const clearBtn = document.getElementById("clear-btn");
+  const suggestionsEl = document.getElementById("suggestions");
+  const statusEl = document.getElementById("status");
+  const resultsHeaderEl = document.getElementById("results-header");
+  const categoryChipsEl = document.getElementById("category-chips");
+  const resultsNameEl = document.getElementById("results-name");
+  const resultsAddressEl = document.getElementById("results-address");
+  const resultsEl = document.getElementById("results");
+
+  const MAX_SUGGESTIONS = 8;
+  const DEBOUNCE_MS = 220;
+
+  const CATEGORY_LABELS = {
+    spicy: "🌶️ Spicy",
+    hearty: "🍖 Hearty",
+    light: "🥗 Light",
+    sweet: "🍰 Sweet",
+    comfort: "🏠 Comfort",
+  };
+
+  let debounceTimer = null;
+  let latestQuery = "";
+  let currentMatches = [];
+  let highlightedIndex = -1;
+  let currentBusiness = null;
+  let selectedCategories = new Set();
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+
+  function formatAddress(m) {
+    return [m.address, m.city, m.state, m.postal_code].filter(Boolean).join(", ");
+  }
+
+  function highlightMatch(text, query) {
+    const escaped = escapeHtml(text);
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1 || !query) return escaped;
+    const before = escapeHtml(text.slice(0, idx));
+    const match = escapeHtml(text.slice(idx, idx + query.length));
+    const after = escapeHtml(text.slice(idx + query.length));
+    return `${before}<mark>${match}</mark>${after}`;
+  }
+
+  function setStatus(text, isError = false) {
+    if (!text) { statusEl.hidden = true; return; }
+    statusEl.hidden = false;
+    statusEl.className = "status" + (isError ? " error" : "");
+    statusEl.innerHTML = text;
+  }
+
+  function closeSuggestions() {
+    suggestionsEl.classList.remove("open");
+    suggestionsEl.innerHTML = "";
+    currentMatches = [];
+    highlightedIndex = -1;
+  }
+
+  function openSuggestions() {
+    suggestionsEl.classList.add("open");
+  }
+
+  function renderSuggestions(matches, query) {
+    currentMatches = matches.slice(0, MAX_SUGGESTIONS);
+    highlightedIndex = currentMatches.length ? 0 : -1;
+
+    if (matches.length === 0) {
+      suggestionsEl.innerHTML = `<div class="suggestion-empty">No restaurants match "${escapeHtml(query)}"</div>`;
+      openSuggestions();
+      return;
+    }
+
+    suggestionsEl.innerHTML = currentMatches
+      .map((m, i) => `
+        <button class="suggestion-item${i === 0 ? " highlighted" : ""}" data-index="${i}">
+          <span class="suggestion-name">${highlightMatch(m.name, query)}</span>
+          <span class="suggestion-address">${escapeHtml(formatAddress(m))}</span>
+        </button>
+      `)
+      .join("") + (matches.length > MAX_SUGGESTIONS
+        ? `<div class="suggestion-more">...and ${matches.length - MAX_SUGGESTIONS} more — keep typing to narrow it down</div>`
+        : "");
+
+    suggestionsEl.querySelectorAll(".suggestion-item").forEach((btn) => {
+      btn.addEventListener("click", () => selectRestaurant(currentMatches[Number(btn.dataset.index)]));
+      btn.addEventListener("mouseenter", () => setHighlight(Number(btn.dataset.index)));
+    });
+
+    openSuggestions();
+  }
+
+  function setHighlight(index) {
+    highlightedIndex = index;
+    suggestionsEl.querySelectorAll(".suggestion-item").forEach((el, i) => {
+      el.classList.toggle("highlighted", i === index);
+    });
+  }
+
+  async function fetchSuggestions(query) {
+    latestQuery = query;
+    try {
+      const res = await fetch(`/api/restaurants/search?name=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      const matches = await res.json();
+      if (query !== latestQuery) return; // a newer keystroke has already superseded this response
+      renderSuggestions(matches, query);
+    } catch (err) {
+      if (query !== latestQuery) return;
+      closeSuggestions();
+    }
+  }
+
+  function selectRestaurant(business) {
+    searchInput.value = business.name;
+    closeSuggestions();
+    loadRecommendations(business);
+  }
+
+  async function loadRecommendations(business) {
+    currentBusiness = business;
+    selectedCategories = new Set();
+    resultsEl.innerHTML = "";
+    resultsHeaderEl.hidden = true;
+    categoryChipsEl.hidden = true;
+    categoryChipsEl.innerHTML = "";
+    setStatus(
+      '<span class="spinner"></span>Looking up dishes — first lookup for a restaurant can take a while ' +
+      "(it's extracting every review with Claude); repeat lookups are instant."
+    );
+
+    resultsNameEl.textContent = business.name;
+    resultsAddressEl.textContent = formatAddress(business);
+    resultsHeaderEl.hidden = false;
+
+    // Both calls share the same server-side cache (pipeline.lookup_restaurant's
+    // get_dish_profiles) — running them together doesn't mean extracting twice.
+    const [dishesOk] = await Promise.all([fetchAndRenderDishes(), loadCategoryChips(business.business_id)]);
+    if (dishesOk) setStatus("");
+  }
+
+  async function loadCategoryChips(businessId) {
+    try {
+      const res = await fetch(`/api/restaurants/${businessId}/categories`);
+      if (!res.ok) return;
+      const counts = await res.json();
+      renderCategoryChips(counts);
+    } catch (err) {
+      // Non-critical — filter chips just won't appear if this fails.
+    }
+  }
+
+  // Matches pipeline.categories.MAX_CATEGORY_DISPLAY, which is what the
+  // API's counts are already capped at — this just decides how to *label*
+  // a count that hit the cap ("10+") vs. a count that's genuinely under it.
+  const MAX_CATEGORY_DISPLAY = 10;
+
+  function renderCategoryChips(counts) {
+    const entries = Object.entries(counts);
+    if (entries.length === 0) {
+      categoryChipsEl.hidden = true;
+      return;
+    }
+    categoryChipsEl.innerHTML = entries
+      .map(([category, count]) => `
+        <button class="chip" data-category="${escapeHtml(category)}">
+          ${CATEGORY_LABELS[category] ?? escapeHtml(category)}
+          <span class="chip-count">${count >= MAX_CATEGORY_DISPLAY ? `${count}+` : count}</span>
+        </button>
+      `)
+      .join("");
+    categoryChipsEl.querySelectorAll(".chip").forEach((btn) => {
+      btn.addEventListener("click", () => toggleCategory(btn.dataset.category));
+    });
+    categoryChipsEl.hidden = false;
+  }
+
+  async function toggleCategory(category) {
+    if (selectedCategories.has(category)) {
+      selectedCategories.delete(category);
+    } else {
+      selectedCategories.add(category);
+    }
+    categoryChipsEl.querySelectorAll(".chip").forEach((btn) => {
+      btn.classList.toggle("active", selectedCategories.has(btn.dataset.category));
+    });
+    setStatus('<span class="spinner"></span>Updating...');
+    const ok = await fetchAndRenderDishes();
+    if (ok) setStatus("");
+  }
+
+  async function fetchAndRenderDishes() {
+    if (!currentBusiness) return false;
+    const params = new URLSearchParams({ top_n: 10 });
+    if (selectedCategories.size > 0) params.set("categories", [...selectedCategories].join(","));
+
+    try {
+      const res = await fetch(`/api/restaurants/${currentBusiness.business_id}/recommendations?${params}`);
+      if (!res.ok) throw new Error(`Lookup failed (${res.status})`);
+      const dishes = await res.json();
+
+      if (dishes.length === 0) {
+        const note = selectedCategories.size > 0
+          ? "No dishes match the selected filters — try removing one."
+          : "No dish has enough reviews yet to recommend confidently.";
+        resultsEl.innerHTML = `<div class="empty-note">${note}</div>`;
+        return true;
+      }
+      renderDishes(dishes);
+      return true;
+    } catch (err) {
+      setStatus(err.message, true);
+      return false;
+    }
+  }
+
+  function renderDishes(dishes) {
+    resultsEl.innerHTML = "";
+    dishes.forEach((dish, i) => {
+      const total = dish.positive_count + dish.negative_count;
+      const positivePct = total > 0 ? Math.round((dish.positive_count / total) * 100) : 50;
+      const fillClass = positivePct >= 80 ? "" : positivePct >= 40 ? "mixed" : "negative";
+
+      const card = document.createElement("div");
+      card.className = "dish-card";
+      card.style.animationDelay = `${i * 60}ms`;
+      card.innerHTML = `
+        <div class="dish-top">
+          <div class="rank-badge">${dish.rank}</div>
+          <div class="dish-name-block">
+            <div class="dish-name">${escapeHtml(dish.name)}</div>
+            <div class="sentiment-row">
+              <span class="sentiment-bar"><span class="sentiment-fill ${fillClass}" style="width:${positivePct}%"></span></span>
+              <span>${dish.positive_count}/${total} positive · ${dish.mention_count} mention${dish.mention_count === 1 ? "" : "s"}</span>
+            </div>
+          </div>
+        </div>
+        <p class="blurb">${escapeHtml(dish.blurb)}</p>
+        <div class="tags">${dish.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
+      `;
+      resultsEl.appendChild(card);
+    });
+  }
+
+  // --- Input wiring ---
+  searchInput.addEventListener("input", () => {
+    const query = searchInput.value.trim();
+    clearBtn.classList.toggle("visible", query.length > 0);
+    clearTimeout(debounceTimer);
+
+    if (query.length < 2) {
+      closeSuggestions();
+      return;
+    }
+    debounceTimer = setTimeout(() => fetchSuggestions(query), DEBOUNCE_MS);
+  });
+
+  searchInput.addEventListener("keydown", (e) => {
+    if (!suggestionsEl.classList.contains("open") || currentMatches.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((highlightedIndex + 1) % currentMatches.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((highlightedIndex - 1 + currentMatches.length) % currentMatches.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightedIndex >= 0) selectRestaurant(currentMatches[highlightedIndex]);
+    } else if (e.key === "Escape") {
+      closeSuggestions();
+    }
+  });
+
+  clearBtn.addEventListener("click", () => {
+    searchInput.value = "";
+    clearBtn.classList.remove("visible");
+    closeSuggestions();
+    searchInput.focus();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-wrap")) closeSuggestions();
+  });
+</script>
+</body>
+</html>
