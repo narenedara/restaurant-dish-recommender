@@ -1,5 +1,11 @@
 # Deploying for friends to try
 
+**Status: live.** Deployed at a Railway URL (get it with `railway domain`,
+or see your Railway dashboard) backed by Supabase Postgres. This doc is both
+the "how to do it again" instructions and a record of two non-obvious issues
+hit during the real deployment — both are the kind of thing that silently
+breaks a from-scratch attempt if you don't know to look for them.
+
 This moves the app from your laptop to the internet: **Supabase** for Postgres
 (pgvector built in, free tier), **Railway** for the FastAPI app itself. Total
 cost at friends-trying-it-out scale: $0/month on free tiers, likely staying
@@ -11,18 +17,36 @@ below.
 1. Go to [supabase.com](https://supabase.com), sign up, create a new project
    (pick any region close to you/your friends — doesn't need to match
    Railway's region, but closer is marginally faster).
-2. Once it's provisioned, go to **Project Settings → Database** and copy the
-   **connection string** (URI format, "Session pooler" or "Transaction
-   pooler" — either works for this app's connection-per-request pattern).
-   It looks like:
+2. Once it's provisioned, click **Connect** at the top of the project
+   dashboard (not under Project Settings — Supabase moved this at some
+   point) and copy the **connection string** (URI format, "Session pooler"
+   or "Transaction pooler" tab — either works for this app's
+   connection-per-request pattern). It looks like:
    ```
    postgresql://postgres.xxxxx:[PASSWORD]@aws-0-xxxxx.pooler.supabase.com:5432/postgres
    ```
    Replace `[PASSWORD]` with the database password you set during project
-   creation.
+   creation — note that's a literal substitution (delete the brackets too),
+   not a placeholder to fill in around.
 3. pgvector is already available on Supabase — `db/schema.sql`'s
    `CREATE EXTENSION IF NOT EXISTS vector;` will enable it when you run the
    schema below, no extra step needed.
+4. **Non-obvious issue #1: `search_path` comes back empty on a fresh Supabase
+   project.** Postgres normally defaults new connections to search the
+   `public` schema automatically; Supabase's pooler doesn't. Without a fix,
+   every unqualified query this app makes (`SELECT ... FROM businesses`,
+   which is all of them) fails with `relation "businesses" does not exist`
+   — even though the tables exist exactly where they should, confirmed with
+   `\dt public.*`. `ALTER DATABASE postgres SET search_path TO public;`
+   looks like the fix but doesn't actually stick (the pooler resets session
+   state). What does work: append a connection-string parameter so *every*
+   connection sets it explicitly, confirmed through both raw `psql` and the
+   app's actual `psycopg` client:
+   ```
+   postgresql://postgres.xxxxx:[PASSWORD]@aws-0-xxxxx.pooler.supabase.com:5432/postgres?options=-c%20search_path%3Dpublic
+   ```
+   Use *this* full string (with the `?options=...` suffix) as `DATABASE_URL`
+   everywhere below, not the bare one Supabase's Connect panel gives you.
 
 ### Migrate your data (not a fresh load — preserve what's already cached)
 
@@ -69,20 +93,38 @@ Code's already on GitHub: https://github.com/narenedara/restaurant-dish-recommen
 2. Pick `restaurant-dish-recommender`, authorize Railway's GitHub App if asked
 3. Railway reads the `Procfile` automatically — no build config needed
 
-**Option B — CLI, deploy from your local directory directly:**
+**Option B — CLI, deploy from your local directory directly** (what was
+actually used):
 ```bash
-railway login          # opens a browser to authenticate
-railway init            # creates a new Railway project, asks for a name
-railway up              # uploads this directory and deploys it
+railway login                                  # opens a browser to authenticate
+railway init --name restaurant-dish-recommender  # creates the project
+railway up -y -d                                # first deploy — creates the service
 ```
 
-Then set the three secrets it needs (**Railway dashboard → your service →
-Variables**, or via CLI):
+Then set the three secrets (`--stdin` keeps them out of shell history):
 
 ```bash
-railway variables --set "DATABASE_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-0-xxxxx.pooler.supabase.com:5432/postgres"
-railway variables --set "ANTHROPIC_API_KEY=sk-ant-..."
-railway variables --set "VOYAGE_API_KEY=pa-..."
+echo -n '<DATABASE_URL from step 1, with the ?options=... suffix>' | railway variable set DATABASE_URL --stdin --skip-deploys
+```
+
+**Non-obvious issue #2: don't extract secrets out of `.env` with `cut`/`grep`.**
+This project's `.env` wraps values in literal quotes
+(`ANTHROPIC_API_KEY='sk-ant-...'`), which `python-dotenv` strips automatically
+— so the app has always worked locally despite that. A raw shell `cut -d= -f2-`
+does *not* strip those quotes, so the key Railway receives ends up with the
+quote characters embedded as part of the string: `'sk-ant-...'` instead of
+`sk-ant-...`. That's invalid and fails with `AuthenticationError` on every
+Claude call — not at deploy time, only when a request actually tries to use
+it, which makes it easy to miss until you test a real cold-start lookup (a
+cached restaurant's recommendations look completely normal, since they never
+touch Claude). Extract correctly with Python's own parser instead of shell
+text tools:
+
+```bash
+python3 -c "from dotenv import dotenv_values; import sys; sys.stdout.write(dotenv_values('.env')['ANTHROPIC_API_KEY'])" \
+    | railway variable set ANTHROPIC_API_KEY --stdin --skip-deploys
+python3 -c "from dotenv import dotenv_values; import sys; sys.stdout.write(dotenv_values('.env')['VOYAGE_API_KEY'])" \
+    | railway variable set VOYAGE_API_KEY --stdin --skip-deploys
 ```
 
 Railway reads the `Procfile` in this repo (`web: uvicorn api.main:app --host
@@ -90,12 +132,12 @@ Railway reads the `Procfile` in this repo (`web: uvicorn api.main:app --host
 needed. After setting the variables, redeploy so the app picks them up:
 
 ```bash
-railway up
+railway up -y -d
+railway domain   # generates/shows the public URL
 ```
 
-Railway will give you a public URL (`https://your-app.up.railway.app` or
-similar, under **Settings → Networking → Generate Domain** if one isn't
-assigned automatically) — that's the link to send your friends.
+That URL (`https://your-app.up.railway.app` or similar) is what you send
+your friends.
 
 **Railway cost**: the free trial includes a one-time credit; after that it's
 usage-based billing (CPU/memory/time actually consumed), typically a few
@@ -105,12 +147,25 @@ without adding a payment method.
 
 ## 3. Sanity-check before sharing the link
 
+A cached-restaurant check isn't enough — it never touches Claude or Voyage,
+so it can't catch an API key problem (this is exactly how issue #2 above
+almost shipped unnoticed). Check both:
+
 ```bash
+# Cached restaurant — tests DATABASE_URL / search_path
 curl -s https://your-app.up.railway.app/api/restaurants/search?name=Zahav
+
+# A restaurant that's never been looked up — tests ANTHROPIC_API_KEY and
+# VOYAGE_API_KEY too, since this forces a real extraction. Find one with:
+#   SELECT id, name FROM businesses b WHERE NOT EXISTS
+#   (SELECT 1 FROM reviews r WHERE r.business_id = b.id AND r.extracted_at IS NOT NULL) LIMIT 1;
+curl -s https://your-app.up.railway.app/api/restaurants/<fresh-business-id>/recommendations?top_n=3
+# then confirm it actually wrote data, not just returned 200:
+#   SELECT count(*) FROM dish_extractions WHERE business_id = <fresh-business-id>;
 ```
 
-Should return the same JSON you'd get locally. Then open the URL in a
-browser and try a real search end to end before sending it to anyone.
+Then open the URL in a browser and try a real search end to end before
+sending it to anyone.
 
 ## What doesn't change
 
